@@ -26,6 +26,11 @@ static void log_vram_err(amds_gpu_t *gpu, amds_logger_t *lg, const char *stage, 
     amds_error_loc_t loc;
     amds_decode_address(gpu, e->addr, &loc);
 
+    if (g_amds_logger) {
+        amds_log_printf(g_amds_logger, "[ERROR] %s GPU%d %s ADDR=0x%016llx EXPECT=%08x ACTUAL=%08x LOC=%s",
+                        stage, gpu->index, gpu->drm_name, (unsigned long long)e->addr, e->expected, e->actual, loc.label);
+    }
+
     char line[1024];
     snprintf(line, sizeof(line),
              "[%ld] [%s] [GPU%d %s %s EDGE=%.1f HOT=%.1f PWR=%.1f GPU=%.0f%% MEM=%.0f%%] "
@@ -83,17 +88,27 @@ static int pick_amd_gpu(cl_platform_id *out_p, cl_device_id *out_d) {
 
 int amds_ocl_init(amds_ocl_ctx_t *ctx) {
     memset(ctx, 0, sizeof(*ctx));
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] initializing OpenCL");
 
     cl_platform_id platform = NULL;
     cl_device_id device = NULL;
-    if (pick_amd_gpu(&platform, &device) < 0) return -1;
+    if (pick_amd_gpu(&platform, &device) < 0) {
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] no AMD GPU platform found");
+        return -1;
+    }
+
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] selected AMD device");
 
     cl_int err;
     cl_context context = clCreateContext(NULL, 1, &device, NULL, NULL, &err);
-    if (!context || err != CL_SUCCESS) return -1;
+    if (!context || err != CL_SUCCESS) {
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create context: %d", err);
+        return -1;
+    }
 
     cl_command_queue queue = clCreateCommandQueue(context, device, 0, &err);
     if (!queue || err != CL_SUCCESS) {
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create command queue: %d", err);
         clReleaseContext(context);
         return -1;
     }
@@ -101,6 +116,7 @@ int amds_ocl_init(amds_ocl_ctx_t *ctx) {
     const char *src[] = { amds_vram_src };
     cl_program prog = clCreateProgramWithSource(context, 1, src, NULL, &err);
     if (err != CL_SUCCESS) {
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create program: %d", err);
         clReleaseCommandQueue(queue);
         clReleaseContext(context);
         return -1;
@@ -108,6 +124,11 @@ int amds_ocl_init(amds_ocl_ctx_t *ctx) {
 
     err = clBuildProgram(prog, 1, &device, "", NULL, NULL);
     if (err != CL_SUCCESS) {
+        if (g_amds_logger) {
+            char log[16384];
+            clGetProgramBuildInfo(prog, device, CL_PROGRAM_BUILD_LOG, sizeof(log), log, NULL);
+            amds_log_printf(g_amds_logger, "[OCL] program build failed: %d\n%s", err, log);
+        }
         clReleaseProgram(prog);
         clReleaseCommandQueue(queue);
         clReleaseContext(context);
@@ -115,13 +136,13 @@ int amds_ocl_init(amds_ocl_ctx_t *ctx) {
     }
 
     cl_kernel k_fill_pattern = clCreateKernel(prog, "fill_pattern", &err);
-    if (err != CL_SUCCESS) goto fail;
+    if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create fill_pattern kernel"); goto fail; }
     cl_kernel k_verify_pattern = clCreateKernel(prog, "verify_pattern", &err);
-    if (err != CL_SUCCESS) goto fail;
+    if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create verify_pattern kernel"); goto fail; }
     cl_kernel k_fill_lcg = clCreateKernel(prog, "fill_lcg", &err);
-    if (err != CL_SUCCESS) goto fail;
+    if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create fill_lcg kernel"); goto fail; }
     cl_kernel k_verify_lcg = clCreateKernel(prog, "verify_lcg", &err);
-    if (err != CL_SUCCESS) goto fail;
+    if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create verify_lcg kernel"); goto fail; }
 
     cl_ulong global_mem = 0;
     clGetDeviceInfo(device, CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(global_mem), &global_mem, NULL);
@@ -129,12 +150,14 @@ int amds_ocl_init(amds_ocl_ctx_t *ctx) {
     size_t vram_bytes = (size_t)((global_mem > (512ULL << 20)) ? (global_mem / 4) : (256ULL << 20));
     size_t vram_words = vram_bytes / 4;
 
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] global mem: %lu MB, using %lu MB for test", global_mem >> 20, vram_bytes >> 20);
+
     cl_mem buf_vram = clCreateBuffer(context, CL_MEM_READ_WRITE, vram_bytes, NULL, &err);
-    if (err != CL_SUCCESS) goto fail;
+    if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create vram buffer: %d", err); goto fail; }
     cl_mem buf_err_count = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(uint32_t), NULL, &err);
-    if (err != CL_SUCCESS) goto fail;
+    if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create err_count buffer"); goto fail; }
     cl_mem buf_errs = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(amds_ocl_err_t) * 2048, NULL, &err);
-    if (err != CL_SUCCESS) goto fail;
+    if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create errs buffer"); goto fail; }
 
     char ext[8192] = {0};
     clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof(ext), ext, NULL);
@@ -155,6 +178,7 @@ int amds_ocl_init(amds_ocl_ctx_t *ctx) {
     ctx->vram_words = vram_words;
     ctx->has_fp64 = strstr(ext, "cl_khr_fp64") != NULL;
     ctx->ready = true;
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] OpenCL initialized successfully");
     return 0;
 
 fail:

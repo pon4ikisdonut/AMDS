@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <pthread.h>
 #include <limits.h>
+#include <stdarg.h>
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
@@ -60,6 +61,9 @@ typedef struct {
 int amds_logger_init(amds_logger_t *lg, const char *path);
 void amds_logger_close(amds_logger_t *lg);
 int amds_log_text(amds_logger_t *lg, const char *text);
+int amds_log_printf(amds_logger_t *lg, const char *fmt, ...);
+
+extern amds_logger_t *g_amds_logger;
 
 int amds_mkdir_p(const char *path);
 int amds_read_first_line(const char *path, char *buf, size_t sz);

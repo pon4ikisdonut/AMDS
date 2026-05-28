@@ -171,27 +171,36 @@ static int run_full_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_cou
 }
 
 int amds_run_cli(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_count) {
-    amds_logger_t lg;
-    memset(&lg, 0, sizeof(lg));
-    if (amds_logger_init(&lg, cfg->log_path) < 0) {
-        fprintf(stderr, "AMDS: failed to open log file\n");
-        return 1;
+    amds_logger_t *lg = g_amds_logger;
+    bool own_lg = false;
+
+    if (!lg) {
+        lg = calloc(1, sizeof(amds_logger_t));
+        if (amds_logger_init(lg, cfg->log_path) < 0) {
+            fprintf(stderr, "AMDS: failed to open log file\n");
+            free(lg);
+            return 1;
+        }
+        own_lg = true;
     }
+
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[CLI] starting in mode %s", cfg->mode);
 
     int rc = 0;
     if (!strcmp(cfg->mode, "monitor")) {
-        rc = run_monitor_mode(cfg, gpus, gpu_count, &lg);
+        rc = run_monitor_mode(cfg, gpus, gpu_count, lg);
     } else if (!strcmp(cfg->mode, "vram")) {
-        rc = run_vram_mode(cfg, gpus, gpu_count, &lg);
+        rc = run_vram_mode(cfg, gpus, gpu_count, lg);
     } else if (!strcmp(cfg->mode, "core")) {
-        rc = run_core_mode(cfg, gpus, gpu_count, &lg);
+        rc = run_core_mode(cfg, gpus, gpu_count, lg);
     } else if (!strcmp(cfg->mode, "full")) {
-        rc = run_full_mode(cfg, gpus, gpu_count, &lg);
+        rc = run_full_mode(cfg, gpus, gpu_count, lg);
     } else {
         fprintf(stderr, "AMDS: unknown mode '%s'\n", cfg->mode);
         rc = 1;
     }
 
-    amds_logger_close(&lg);
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[CLI] finished with code %d", rc);
+    if (own_lg) { amds_logger_close(lg); free(lg); }
     return rc;
 }

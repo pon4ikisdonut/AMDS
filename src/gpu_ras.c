@@ -37,8 +37,12 @@ static int count_bad_pages(const char *path, uint64_t *count) {
 
 int amds_ras_read(amds_gpu_t *gpu) {
     char rasdir[PATH_MAX];
-    if (amds_path_join(rasdir, sizeof(rasdir), gpu->device_path, "ras") < 0) return -1;
+    if (amds_path_join(rasdir, sizeof(rasdir), gpu->device_path, "ras") < 0) {
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[RAS] no ras directory found for GPU%d", gpu->index);
+        return -1;
+    }
 
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[RAS] polling RAS for GPU%d", gpu->index);
     pthread_mutex_lock(&gpu->lock);
 
     gpu->ras.corrected = 0;
@@ -62,6 +66,7 @@ int amds_ras_read(amds_gpu_t *gpu) {
         if (amds_path_join(p, sizeof(p), rasdir, files[i]) == 0) {
             if (read_err_count_file(p, &gpu->ras.corrected, &gpu->ras.uncorrected) == 0) {
                 gpu->ras.available = true;
+                if (g_amds_logger) amds_log_printf(g_amds_logger, "[RAS] %s: CE=%lu UE=%lu", files[i], gpu->ras.corrected, gpu->ras.uncorrected);
             }
         }
     }
@@ -70,12 +75,19 @@ int amds_ras_read(amds_gpu_t *gpu) {
     if (amds_path_join(bp, sizeof(bp), rasdir, "gpu_vram_bad_pages") == 0) {
         if (count_bad_pages(bp, &gpu->ras.bad_pages) == 0) {
             gpu->ras.available = true;
+            if (g_amds_logger) amds_log_printf(g_amds_logger, "[RAS] bad_pages: %lu", gpu->ras.bad_pages);
         }
+    }
+
+    if (g_amds_logger && gpu->ras.available) {
+        amds_log_printf(g_amds_logger, "[RAS] GPU%d summary: CE=%lu UE=%lu BAD=%lu",
+                        gpu->index, gpu->ras.corrected, gpu->ras.uncorrected, gpu->ras.bad_pages);
     }
 
     pthread_mutex_unlock(&gpu->lock);
     return 0;
 }
+
 
 int amds_poll_ras(amds_gpu_t *gpu) {
     return amds_ras_read(gpu);

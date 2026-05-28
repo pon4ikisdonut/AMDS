@@ -28,22 +28,33 @@ static const char *amds_stress_src =
 static int ensure_stress_program(amds_ocl_ctx_t *ctx) {
     if (ctx->program_stress && ctx->k_fp32) return 0;
 
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] building stress kernels");
+
     cl_int err;
     cl_context context = (cl_context)ctx->context;
     cl_device_id device = (cl_device_id)ctx->device;
 
     const char *src[] = { amds_stress_src };
     cl_program prog = clCreateProgramWithSource(context, 1, src, NULL, &err);
-    if (err != CL_SUCCESS) return -1;
+    if (err != CL_SUCCESS) {
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] failed to create program: %d", err);
+        return -1;
+    }
 
     err = clBuildProgram(prog, 1, &device, "", NULL, NULL);
     if (err != CL_SUCCESS) {
+        if (g_amds_logger) {
+            char log[16384];
+            clGetProgramBuildInfo(prog, device, CL_PROGRAM_BUILD_LOG, sizeof(log), log, NULL);
+            amds_log_printf(g_amds_logger, "[STRESS] program build failed: %d\n%s", err, log);
+        }
         clReleaseProgram(prog);
         return -1;
     }
 
     cl_kernel k_fp32 = clCreateKernel(prog, "fp32_stress", &err);
     if (err != CL_SUCCESS) {
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] failed to create fp32 kernel");
         clReleaseProgram(prog);
         return -1;
     }
@@ -51,16 +62,23 @@ static int ensure_stress_program(amds_ocl_ctx_t *ctx) {
     cl_kernel k_fp64 = NULL;
     if (ctx->has_fp64) {
         k_fp64 = clCreateKernel(prog, "fp64_stress", &err);
-        if (err != CL_SUCCESS) k_fp64 = NULL;
+        if (err != CL_SUCCESS) {
+            if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] failed to create fp64 kernel");
+            k_fp64 = NULL;
+        }
     }
 
     ctx->program_stress = prog;
     ctx->k_fp32 = k_fp32;
     ctx->k_fp64 = k_fp64;
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] kernels built successfully");
     return 0;
 }
 
 static void log_stress(amds_gpu_t *gpu, amds_logger_t *lg, const char *stage) {
+    if (g_amds_logger) {
+        amds_log_printf(g_amds_logger, "[STRESS] %s finished for GPU%d (%s)", stage, gpu->index, gpu->drm_name);
+    }
     char line[1024];
     snprintf(line, sizeof(line),
              "[%ld] [%s] [GPU%d %s %s SCLK=%.0f MCLK=%.0f EDGE=%.1f HOT=%.1f PWR=%.1f GPU=%.0f%% MEM=%.0f%%]",
@@ -80,6 +98,7 @@ static void log_stress(amds_gpu_t *gpu, amds_logger_t *lg, const char *stage) {
 }
 
 int amds_core_stress_fp32(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg) {
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] starting FP32 stress on GPU%d", gpu->index);
     if (!ctx || !ctx->ready) return -1;
     if (ensure_stress_program(ctx) < 0) return -1;
 
@@ -93,7 +112,10 @@ int amds_core_stress_fp32(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *l
 
     if (!ctx->buf_stress) {
         ctx->buf_stress = clCreateBuffer(context, CL_MEM_READ_WRITE, bytes, NULL, &err);
-        if (err != CL_SUCCESS) return -1;
+        if (err != CL_SUCCESS) {
+            if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] failed to create stress buffer: %d", err);
+            return -1;
+        }
     }
 
     uint32_t loops = 3000;
@@ -103,7 +125,10 @@ int amds_core_stress_fp32(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *l
 
     size_t global = elems;
     err = clEnqueueNDRangeKernel(q, k, 1, NULL, &global, NULL, 0, NULL, NULL);
-    if (err != CL_SUCCESS) return -1;
+    if (err != CL_SUCCESS) {
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] kernel launch failed: %d", err);
+        return -1;
+    }
 
     clFinish(q);
     log_stress(gpu, lg, "CORE_FP32");
@@ -111,6 +136,7 @@ int amds_core_stress_fp32(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *l
 }
 
 int amds_core_stress_fp64(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg) {
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] starting FP64 stress on GPU%d", gpu->index);
     if (!ctx || !ctx->ready || !ctx->has_fp64) return -1;
     if (ensure_stress_program(ctx) < 0) return -1;
     if (!ctx->k_fp64) return -1;
@@ -125,7 +151,10 @@ int amds_core_stress_fp64(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *l
 
     if (!ctx->buf_stress) {
         ctx->buf_stress = clCreateBuffer(context, CL_MEM_READ_WRITE, bytes, NULL, &err);
-        if (err != CL_SUCCESS) return -1;
+        if (err != CL_SUCCESS) {
+            if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] failed to create stress buffer: %d", err);
+            return -1;
+        }
     }
 
     uint32_t loops = 800;
@@ -135,7 +164,10 @@ int amds_core_stress_fp64(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *l
 
     size_t global = elems;
     err = clEnqueueNDRangeKernel(q, k, 1, NULL, &global, NULL, 0, NULL, NULL);
-    if (err != CL_SUCCESS) return -1;
+    if (err != CL_SUCCESS) {
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] kernel launch failed: %d", err);
+        return -1;
+    }
 
     clFinish(q);
     log_stress(gpu, lg, "CORE_FP64");

@@ -266,19 +266,27 @@ static void refresh_all(amds_gpu_t *gpus, int gpu_count) {
 }
 
 static int run_selected_test(amds_tui_state_t *st, amds_gpu_t *g) {
-    amds_logger_t lg;
-    memset(&lg, 0, sizeof(lg));
-    if (amds_logger_init(&lg, "./amds_diag.log") < 0) {
-        snprintf(st->status, sizeof(st->status), "failed to open log file");
-        return -1;
+    amds_logger_t *lg = g_amds_logger;
+    bool own_lg = false;
+
+    if (!lg) {
+        lg = calloc(1, sizeof(amds_logger_t));
+        if (amds_logger_init(lg, "./amds_diag.log") < 0) {
+            snprintf(st->status, sizeof(st->status), "failed to open log file");
+            free(lg);
+            return -1;
+        }
+        own_lg = true;
     }
+
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[TUI] starting test sequence for GPU%d", g->index);
 
     if ((st->mode == AMDS_UI_VRAM || st->mode == AMDS_UI_CORE || st->mode == AMDS_UI_FULL) && !st->ocl_ready) {
         if (amds_ocl_init(&st->ocl) == 0) {
             st->ocl_ready = true;
         } else {
             snprintf(st->status, sizeof(st->status), "OpenCL runtime initialization failed");
-            amds_logger_close(&lg);
+            if (own_lg) { amds_logger_close(lg); free(lg); }
             return -1;
         }
     }
@@ -287,49 +295,52 @@ static int run_selected_test(amds_tui_state_t *st, amds_gpu_t *g) {
     amds_poll_ras(g);
 
     if (st->mode == AMDS_UI_MONITOR) {
-        log_stage(&lg, g, "MONITOR", "manual refresh");
+        log_stage(lg, g, "MONITOR", "manual refresh");
         snprintf(st->status, sizeof(st->status), "monitor refresh done");
     } else if (st->mode == AMDS_UI_VRAM) {
-        log_stage(&lg, g, "VRAM_PATTERN_BEGIN", "");
-        amds_vram_test_pattern(g, &st->ocl, &lg);
-        log_stage(&lg, g, "VRAM_WALKING_BEGIN", "");
-        amds_vram_test_walking(g, &st->ocl, &lg);
-        log_stage(&lg, g, "VRAM_PRNG_BEGIN", "");
-        amds_vram_test_prng(g, &st->ocl, &lg);
+        log_stage(lg, g, "VRAM_PATTERN_BEGIN", "");
+        amds_vram_test_pattern(g, &st->ocl, lg);
+        log_stage(lg, g, "VRAM_WALKING_BEGIN", "");
+        amds_vram_test_walking(g, &st->ocl, lg);
+        log_stage(lg, g, "VRAM_PRNG_BEGIN", "");
+        amds_vram_test_prng(g, &st->ocl, lg);
         snprintf(st->status, sizeof(st->status), "VRAM tests finished");
     } else if (st->mode == AMDS_UI_CORE) {
-        log_stage(&lg, g, "CORE_FP32_BEGIN", "");
-        amds_core_stress_fp32(g, &st->ocl, &lg);
+        log_stage(lg, g, "CORE_FP32_BEGIN", "");
+        amds_core_stress_fp32(g, &st->ocl, lg);
         if (st->ocl.has_fp64) {
-            log_stage(&lg, g, "CORE_FP64_BEGIN", "");
-            amds_core_stress_fp64(g, &st->ocl, &lg);
+            log_stage(lg, g, "CORE_FP64_BEGIN", "");
+            amds_core_stress_fp64(g, &st->ocl, lg);
         } else {
-            log_stage(&lg, g, "CORE_FP64_SKIP", "cl_khr_fp64 unavailable");
+            log_stage(lg, g, "CORE_FP64_SKIP", "cl_khr_fp64 unavailable");
         }
         snprintf(st->status, sizeof(st->status), "CORE tests finished");
     } else if (st->mode == AMDS_UI_FULL) {
-        log_stage(&lg, g, "VRAM_PATTERN_BEGIN", "");
-        amds_vram_test_pattern(g, &st->ocl, &lg);
-        log_stage(&lg, g, "VRAM_WALKING_BEGIN", "");
-        amds_vram_test_walking(g, &st->ocl, &lg);
-        log_stage(&lg, g, "VRAM_PRNG_BEGIN", "");
-        amds_vram_test_prng(g, &st->ocl, &lg);
-        log_stage(&lg, g, "CORE_FP32_BEGIN", "");
-        amds_core_stress_fp32(g, &st->ocl, &lg);
+        log_stage(lg, g, "VRAM_PATTERN_BEGIN", "");
+        amds_vram_test_pattern(g, &st->ocl, lg);
+        log_stage(lg, g, "VRAM_WALKING_BEGIN", "");
+        amds_vram_test_walking(g, &st->ocl, lg);
+        log_stage(lg, g, "VRAM_PRNG_BEGIN", "");
+        amds_vram_test_prng(g, &st->ocl, lg);
+        log_stage(lg, g, "CORE_FP32_BEGIN", "");
+        amds_core_stress_fp32(g, &st->ocl, lg);
         if (st->ocl.has_fp64) {
-            log_stage(&lg, g, "CORE_FP64_BEGIN", "");
-            amds_core_stress_fp64(g, &st->ocl, &lg);
+            log_stage(lg, g, "CORE_FP64_BEGIN", "");
+            amds_core_stress_fp64(g, &st->ocl, lg);
         } else {
-            log_stage(&lg, g, "CORE_FP64_SKIP", "cl_khr_fp64 unavailable");
+            log_stage(lg, g, "CORE_FP64_SKIP", "cl_khr_fp64 unavailable");
         }
         snprintf(st->status, sizeof(st->status), "FULL test finished");
     }
 
     amds_poll_metrics(g);
     amds_poll_ras(g);
-    amds_logger_close(&lg);
+    
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[TUI] test sequence finished for GPU%d", g->index);
+    if (own_lg) { amds_logger_close(lg); free(lg); }
     return 0;
 }
+
 
 static void activate_menu(amds_tui_state_t *st, amds_gpu_t *gpus, int gpu_count) {
     switch (st->selected_menu) {

@@ -4,6 +4,10 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <stdio.h>
+#include <stdarg.h>
+#include <time.h>
+
+amds_logger_t *g_amds_logger = NULL;
 
 int amds_logger_init(amds_logger_t *lg, const char *path) {
     memset(lg, 0, sizeof(*lg));
@@ -43,6 +47,33 @@ int amds_log_text(amds_logger_t *lg, const char *text) {
     fputc('\n', lg->fp);
     fflush(lg->fp);
     fsync(fileno(lg->fp));
+    pthread_mutex_unlock(&lg->lock);
+    return 0;
+}
+
+int amds_log_printf(amds_logger_t *lg, const char *fmt, ...) {
+    pthread_mutex_lock(&lg->lock);
+    if (!lg->fp) {
+        pthread_mutex_unlock(&lg->lock);
+        return -1;
+    }
+
+    char ts[64];
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+    strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", tm_info);
+
+    fprintf(lg->fp, "[%s] ", ts);
+
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(lg->fp, fmt, args);
+    va_end(args);
+
+    fputc('\n', lg->fp);
+    fflush(lg->fp);
+    fsync(fileno(lg->fp));
+
     pthread_mutex_unlock(&lg->lock);
     return 0;
 }

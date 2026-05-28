@@ -205,14 +205,21 @@ int amds_discover_gpus(amds_gpu_t *gpus, int *count) {
     *count = 0;
     memset(gpus, 0, sizeof(amds_gpu_t) * AMDS_MAX_CARDS);
 
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[DISC] scanning /sys/class/drm");
     DIR *d = opendir("/sys/class/drm");
-    if (!d) return -1;
+    if (!d) {
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[DISC] failed to open /sys/class/drm");
+        return -1;
+    }
 
     struct dirent *de;
     while ((de = readdir(d))) {
         if (strncmp(de->d_name, "card", 4) != 0) continue;
         if (strchr(de->d_name, '-')) continue;
-        if (*count >= AMDS_MAX_CARDS) break;
+        if (*count >= AMDS_MAX_CARDS) {
+            if (g_amds_logger) amds_log_printf(g_amds_logger, "[DISC] reached AMDS_MAX_CARDS limit");
+            break;
+        }
 
         amds_gpu_t *gpu = &gpus[*count];
         memset(gpu, 0, sizeof(*gpu));
@@ -226,6 +233,8 @@ int amds_discover_gpus(amds_gpu_t *gpus, int *count) {
         snprintf(gpu->card_path, sizeof(gpu->card_path), "/sys/class/drm/%s", de->d_name);
         snprintf(gpu->device_path, sizeof(gpu->device_path), "%s/device", gpu->card_path);
 
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[DISC] found potential GPU: %s at %s", de->d_name, gpu->device_path);
+
         char path[PATH_MAX], linkbuf[PATH_MAX];
         snprintf(path, sizeof(path), "%s/driver", gpu->device_path);
         ssize_t n = readlink(path, linkbuf, sizeof(linkbuf) - 1);
@@ -233,6 +242,7 @@ int amds_discover_gpus(amds_gpu_t *gpus, int *count) {
             linkbuf[n] = 0;
             if (strstr(linkbuf, "amdgpu")) gpu->driver = AMDS_DRV_AMDGPU;
             else if (strstr(linkbuf, "radeon")) gpu->driver = AMDS_DRV_RADEON;
+            if (g_amds_logger) amds_log_printf(g_amds_logger, "[DISC] driver linked: %s -> %s", path, linkbuf);
         }
 
         read_uevent_info(gpu);
@@ -248,9 +258,16 @@ int amds_discover_gpus(amds_gpu_t *gpus, int *count) {
         amds_guess_memory_layout(gpu);
         read_product_name(gpu);
 
+        if (g_amds_logger) {
+            amds_log_printf(g_amds_logger, "[DISC] GPU%d identified: %s, ID=%s, SUB=%s, FAM=%s, HWMON=%s",
+                            gpu->index, gpu->board_name, gpu->pci_device_id, gpu->subsystem_id,
+                            amds_family_name(gpu->family), gpu->hwmon_path);
+        }
+
         (*count)++;
     }
 
     closedir(d);
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[DISC] discovery finished, found %d AMD GPUs", *count);
     return *count;
 }

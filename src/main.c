@@ -83,6 +83,7 @@ int main(int argc, char **argv) {
     amds_logger_t logger;
     memset(&logger, 0, sizeof(logger));
     if (amds_logger_init(&logger, cfg.log_path) == 0) {
+        g_amds_logger = &logger;
         log_start(&logger, gpus, gpu_count, &cfg);
     }
 
@@ -93,11 +94,13 @@ int main(int argc, char **argv) {
         rc = amds_run_tui(&cfg, gpus, gpu_count);
     }
 
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[INIT] starting exports");
     amds_export_json(&cfg, gpus, gpu_count);
     amds_export_csv(&cfg, gpus, gpu_count);
     amds_export_report(&cfg, gpus, gpu_count);
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[INIT] exports finished");
 
-    log_linef(&logger, "EXIT", rc == 0 ? "DONE" : "FAILED");
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[EXIT] process finished with code %d", rc);
     amds_logger_close(&logger);
     destroy_gpu_mutexes(gpus, gpu_count);
     return rc;
