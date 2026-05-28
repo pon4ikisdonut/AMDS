@@ -1,0 +1,10 @@
+amds
+amds_diag.log
+src/*.o
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+compile_commands.json
+exports/
