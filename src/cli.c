@@ -1,9 +1,9 @@
 #include "../include/amds.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
 #include <string.h>
-#include <time.h>
 
 static void print_gpu_line(const amds_gpu_t *g) {
     printf("GPU%d %-6s %-8s %-12s SCLK=%6.0f MCLK=%6.0f EDGE=%5.1f HOT=%5.1f PWR=%6.1f GPU=%5.0f%% MEM=%5.0f%% VRAM=%6.2f/%6.2f GiB RAS[CE=%llu UE=%llu BAD=%llu]\n",

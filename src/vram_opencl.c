@@ -135,13 +135,18 @@ int amds_ocl_init(amds_ocl_ctx_t *ctx) {
         return -1;
     }
 
-    cl_kernel k_fill_pattern = clCreateKernel(prog, "fill_pattern", &err);
+    cl_kernel k_fill_pattern = NULL;
+    cl_kernel k_verify_pattern = NULL;
+    cl_kernel k_fill_lcg = NULL;
+    cl_kernel k_verify_lcg = NULL;
+
+    k_fill_pattern = clCreateKernel(prog, "fill_pattern", &err);
     if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create fill_pattern kernel"); goto fail; }
-    cl_kernel k_verify_pattern = clCreateKernel(prog, "verify_pattern", &err);
+    k_verify_pattern = clCreateKernel(prog, "verify_pattern", &err);
     if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create verify_pattern kernel"); goto fail; }
-    cl_kernel k_fill_lcg = clCreateKernel(prog, "fill_lcg", &err);
+    k_fill_lcg = clCreateKernel(prog, "fill_lcg", &err);
     if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create fill_lcg kernel"); goto fail; }
-    cl_kernel k_verify_lcg = clCreateKernel(prog, "verify_lcg", &err);
+    k_verify_lcg = clCreateKernel(prog, "verify_lcg", &err);
     if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create verify_lcg kernel"); goto fail; }
 
     cl_ulong global_mem = 0;

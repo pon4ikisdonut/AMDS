@@ -32,7 +32,10 @@ static void copy_str(char *dst, size_t dsz, const char *src) {
         dst[0] = 0;
         return;
     }
-    snprintf(dst, dsz, "%s", src);
+    size_t len = strlen(src);
+    if (len >= dsz) len = dsz - 1;
+    memcpy(dst, src, len);
+    dst[len] = 0;
 }
 
 static void trim_nl(char *s) {

@@ -1,5 +1,6 @@
 #include "../include/amds.h"
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
 #include <ncurses.h>

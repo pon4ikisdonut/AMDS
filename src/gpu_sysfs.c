@@ -20,12 +20,8 @@ static int read_current_dpm(const char *device_path, const char *name, double *m
     char path[PATH_MAX];
     if (amds_path_join(path, sizeof(path), device_path, name) < 0) return -1;
 
-    if (g_amds_logger) amds_log_printf(g_amds_logger, "[SYS] reading DPM from %s", path);
     FILE *f = fopen(path, "r");
-    if (!f) {
-        if (g_amds_logger) amds_log_printf(g_amds_logger, "[SYS] failed to open DPM %s", path);
-        return -1;
-    }
+    if (!f) return -1;
 
     char line[256];
     while (fgets(line, sizeof(line), f)) {
@@ -36,19 +32,16 @@ static int read_current_dpm(const char *device_path, const char *name, double *m
         if (sscanf(p + 1, "%lf", &val) == 1) {
             fclose(f);
             *mhz = val;
-            if (g_amds_logger) amds_log_printf(g_amds_logger, "[METRIC] %s: %.1f MHz", name, *mhz);
             return 0;
         }
     }
 
-    if (g_amds_logger) amds_log_printf(g_amds_logger, "[SYS] no active DPM level found in %s", path);
     fclose(f);
     return -1;
 }
 
 int amds_poll_metrics(amds_gpu_t *gpu) {
     pthread_mutex_lock(&gpu->lock);
-    if (g_amds_logger) amds_log_printf(g_amds_logger, "[METRIC] polling GPU%d (%s)", gpu->index, gpu->drm_name);
 
     if (gpu->driver == AMDS_DRV_AMDGPU) {
         read_metric_double(gpu->device_path, "gpu_busy_percent", 1.0, &gpu->metrics.gpu_busy_pct);

@@ -12,12 +12,6 @@ static void on_sig(int sig) {
     g_stop = 1;
 }
 
-static void log_linef(amds_logger_t *lg, const char *stage, const char *msg) {
-    char line[1024];
-    snprintf(line, sizeof(line), "[%ld] [%s] %s", (long)time(NULL), stage, msg ? msg : "");
-    amds_log_text(lg, line);
-}
-
 static void log_start(amds_logger_t *lg, amds_gpu_t *gpus, int gpu_count, const amds_config_t *cfg) {
     char line[1024];
     snprintf(line, sizeof(line),
