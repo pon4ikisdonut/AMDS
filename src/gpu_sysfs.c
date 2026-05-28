@@ -1,6 +1,8 @@
+#define _GNU_SOURCE
 #include "../include/amds.h"
 #include <string.h>
 #include <stdio.h>
+#include <strings.h>
 
 static int read_metric_u64(const char *base, const char *name, uint64_t *v) {
     char path[PATH_MAX];
@@ -59,8 +61,32 @@ int amds_poll_metrics(amds_gpu_t *gpu) {
         read_metric_double(gpu->hwmon_path, "freq2_input", 1000000.0, &gpu->metrics.mclk_mhz);
         read_metric_double(gpu->hwmon_path, "in0_input", 1.0, &gpu->metrics.vddc_mv);
         read_metric_double(gpu->hwmon_path, "temp1_input", 1000.0, &gpu->metrics.temp_edge_c);
-        read_metric_double(gpu->hwmon_path, "temp2_input", 1000.0, &gpu->metrics.temp_hotspot_c);
-        read_metric_double(gpu->hwmon_path, "power1_average", 1000000.0, &gpu->metrics.power_w);
+
+        bool found_hotspot = false;
+        for (int i = 1; i <= 8; i++) {
+            char lpath[PATH_MAX], lname[32], label[64];
+            snprintf(lname, sizeof(lname), "temp%d_label", i);
+            if (amds_path_join(lpath, sizeof(lpath), gpu->hwmon_path, lname) == 0) {
+                if (amds_read_first_line(lpath, label, sizeof(label)) == 0) {
+                    if (strcasestr(label, "junction") || strcasestr(label, "hotspot")) {
+                        char ipath[32];
+                        snprintf(ipath, sizeof(ipath), "temp%d_input", i);
+                        read_metric_double(gpu->hwmon_path, ipath, 1000.0, &gpu->metrics.temp_hotspot_c);
+                        found_hotspot = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!found_hotspot) {
+            read_metric_double(gpu->hwmon_path, "temp2_input", 1000.0, &gpu->metrics.temp_hotspot_c);
+        }
+
+        if (read_metric_double(gpu->hwmon_path, "power1_average", 1000000.0, &gpu->metrics.power_w) < 0) {
+            if (read_metric_double(gpu->hwmon_path, "power1_input", 1000000.0, &gpu->metrics.power_w) < 0) {
+                read_metric_double(gpu->hwmon_path, "power2_average", 1000000.0, &gpu->metrics.power_w);
+            }
+        }
         read_metric_double(gpu->hwmon_path, "power1_cap", 1000000.0, &gpu->metrics.power_cap_w);
     }
 

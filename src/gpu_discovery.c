@@ -180,33 +180,24 @@ static void read_uevent_info(amds_gpu_t *gpu) {
 
 static void read_product_name(amds_gpu_t *gpu) {
     char path[PATH_MAX], buf[256];
+    const char *candidates[] = {"product_name", "product_model", "model", "product", NULL};
 
-    if (amds_path_join(path, sizeof(path), gpu->device_path, "product") == 0) {
-        if (amds_read_first_line(path, buf, sizeof(buf)) == 0) {
-            trim_nl(buf);
-            copy_str(gpu->board_name, sizeof(gpu->board_name), buf);
-            return;
-        }
-    }
-
-    if (amds_path_join(path, sizeof(path), gpu->device_path, "product_name") == 0) {
-        if (amds_read_first_line(path, buf, sizeof(buf)) == 0) {
-            trim_nl(buf);
-            copy_str(gpu->board_name, sizeof(gpu->board_name), buf);
-            return;
-        }
-    }
-
-    if (amds_path_join(path, sizeof(path), "/sys/class/drm", gpu->drm_name) == 0) {
-        if (amds_path_join(path, sizeof(path), path, "name") == 0) {
+    for (int i = 0; candidates[i]; i++) {
+        if (amds_path_join(path, sizeof(path), gpu->device_path, candidates[i]) == 0) {
             if (amds_read_first_line(path, buf, sizeof(buf)) == 0) {
                 trim_nl(buf);
-                copy_str(gpu->board_name, sizeof(gpu->board_name), buf);
-                return;
+                if (buf[0]) {
+                    copy_str(gpu->board_name, sizeof(gpu->board_name), buf);
+                    return;
+                }
             }
         }
     }
 
+    if (!gpu->board_name[0]) {
+        snprintf(gpu->board_name, sizeof(gpu->board_name), "%s (%s)", 
+                 amds_family_name(gpu->family), gpu->pci_device_id);
+    }
 }
 
 
