@@ -64,6 +64,22 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    int j = 0;
+    for (int i = 0; i < gpu_count; i++) {
+        if (gpus[i].driver == AMDS_DRV_AMDGPU || gpus[i].driver == AMDS_DRV_RADEON) {
+            if (i != j) {
+                gpus[j] = gpus[i];
+            }
+            j++;
+        }
+    }
+    gpu_count = j;
+
+    if (gpu_count <= 0) {
+        fprintf(stderr, "AMDS: no AMD GPUs found after filtering\n");
+        return 1;
+    }
+
     amds_logger_t logger;
     memset(&logger, 0, sizeof(logger));
     if (amds_logger_init(&logger, cfg.log_path) == 0) {
