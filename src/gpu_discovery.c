@@ -181,6 +181,14 @@ static void read_uevent_info(amds_gpu_t *gpu) {
 static void read_product_name(amds_gpu_t *gpu) {
     char path[PATH_MAX], buf[256];
 
+    if (amds_path_join(path, sizeof(path), gpu->device_path, "product") == 0) {
+        if (amds_read_first_line(path, buf, sizeof(buf)) == 0) {
+            trim_nl(buf);
+            copy_str(gpu->board_name, sizeof(gpu->board_name), buf);
+            return;
+        }
+    }
+
     if (amds_path_join(path, sizeof(path), gpu->device_path, "product_name") == 0) {
         if (amds_read_first_line(path, buf, sizeof(buf)) == 0) {
             trim_nl(buf);
@@ -189,12 +197,18 @@ static void read_product_name(amds_gpu_t *gpu) {
         }
     }
 
-    if (gpu->family == AMDS_FAMILY_POLARIS) {
-        copy_str(gpu->board_name, sizeof(gpu->board_name), "Polaris board");
-    } else {
-        copy_str(gpu->board_name, sizeof(gpu->board_name), "AMD GPU");
+    if (amds_path_join(path, sizeof(path), "/sys/class/drm", gpu->drm_name) == 0) {
+        if (amds_path_join(path, sizeof(path), path, "name") == 0) {
+            if (amds_read_first_line(path, buf, sizeof(buf)) == 0) {
+                trim_nl(buf);
+                copy_str(gpu->board_name, sizeof(gpu->board_name), buf);
+                return;
+            }
+        }
     }
+
 }
+
 
 int amds_discover_gpus(amds_gpu_t *gpus, int *count) {
     *count = 0;
