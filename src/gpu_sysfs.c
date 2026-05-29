@@ -88,11 +88,13 @@ int amds_poll_metrics(amds_gpu_t *gpu) {
             }
         }
         read_metric_double(gpu->hwmon_path, "power1_cap", 1000000.0, &gpu->metrics.power_cap_w);
+        read_metric_double(gpu->hwmon_path, "fan1_input", 1.0, &gpu->metrics.fan_rpm);
     }
 
     if (g_amds_logger) {
-        amds_log_printf(g_amds_logger, "[METRIC] GPU%d EDGE=%.1f HOT=%.1f PWR=%.1f SCLK=%.1f MCLK=%.1f BUSY=%.0f%% MEM=%.0f%% VRAM=%lu/%lu",
+        amds_log_printf(g_amds_logger, "[METRIC] GPU%d EDGE=%.1f HOT=%.1f PWR=%.1f FAN=%.0f SCLK=%.1f MCLK=%.1f BUSY=%.0f%% MEM=%.0f%% VRAM=%lu/%lu",
                         gpu->index, gpu->metrics.temp_edge_c, gpu->metrics.temp_hotspot_c, gpu->metrics.power_w,
+                        gpu->metrics.fan_rpm,
                         gpu->metrics.sclk_mhz, gpu->metrics.mclk_mhz, gpu->metrics.gpu_busy_pct, gpu->metrics.mem_busy_pct,
                         gpu->metrics.vram_used, gpu->metrics.vram_total);
     }

@@ -272,6 +272,15 @@ static void clear_err_counter(amds_ocl_ctx_t *ctx) {
     clEnqueueWriteBuffer(q, err_count_buf, CL_TRUE, 0, sizeof(zero), &zero, 0, NULL, NULL);
 }
 
+void amds_vram_clear(amds_ocl_ctx_t *ctx) {
+    if (!ctx || !ctx->ready) return;
+    cl_command_queue q = (cl_command_queue)ctx->queue;
+    cl_mem buf = (cl_mem)ctx->buf_vram;
+    uint32_t zero = 0;
+    clEnqueueFillBuffer(q, buf, &zero, sizeof(zero), 0, ctx->vram_bytes, 0, NULL, NULL);
+    clFinish(q);
+}
+
 int amds_vram_test_pattern(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg) {
     if (!ctx || !ctx->ready) return -1;
 
@@ -323,26 +332,28 @@ int amds_vram_test_walking(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *
     cl_ulong words = (cl_ulong)ctx->vram_words;
     size_t global = ((ctx->vram_words + 255) / 256) * 256;
 
-    for (int b = 0; b < 32; b++) {
-        uint32_t p = 1u << b;
-        clear_err_counter(ctx);
+    for (int p_pass = 0; p_pass < 2; p_pass++) {
+        for (int b = 0; b < 32; b++) {
+            uint32_t p = 1u << b;
+            clear_err_counter(ctx);
 
-        clSetKernelArg(k_fill, 0, sizeof(cl_mem), &buf);
-        clSetKernelArg(k_fill, 1, sizeof(uint32_t), &p);
-        clSetKernelArg(k_fill, 2, sizeof(cl_ulong), &words);
-        clEnqueueNDRangeKernel(q, k_fill, 1, NULL, &global, NULL, 0, NULL, NULL);
+            clSetKernelArg(k_fill, 0, sizeof(cl_mem), &buf);
+            clSetKernelArg(k_fill, 1, sizeof(uint32_t), &p);
+            clSetKernelArg(k_fill, 2, sizeof(cl_ulong), &words);
+            clEnqueueNDRangeKernel(q, k_fill, 1, NULL, &global, NULL, 0, NULL, NULL);
 
-        clSetKernelArg(k_verify, 0, sizeof(cl_mem), &buf);
-        clSetKernelArg(k_verify, 1, sizeof(uint32_t), &p);
-        clSetKernelArg(k_verify, 2, sizeof(cl_ulong), &words);
-        clSetKernelArg(k_verify, 3, sizeof(cl_mem), &err_count);
-        clSetKernelArg(k_verify, 4, sizeof(cl_mem), &errs);
-        clEnqueueNDRangeKernel(q, k_verify, 1, NULL, &global, NULL, 0, NULL, NULL);
-        clFinish(q);
+            clSetKernelArg(k_verify, 0, sizeof(cl_mem), &buf);
+            clSetKernelArg(k_verify, 1, sizeof(uint32_t), &p);
+            clSetKernelArg(k_verify, 2, sizeof(cl_ulong), &words);
+            clSetKernelArg(k_verify, 3, sizeof(cl_mem), &err_count);
+            clSetKernelArg(k_verify, 4, sizeof(cl_mem), &errs);
+            clEnqueueNDRangeKernel(q, k_verify, 1, NULL, &global, NULL, 0, NULL, NULL);
+            clFinish(q);
 
-        uint32_t ec = 0;
-        int got = read_and_log_errors(gpu, ctx, lg, "VRAM_WALKING", &ec);
-        if (got > 0) return got;
+            uint32_t ec = 0;
+            int got = read_and_log_errors(gpu, ctx, lg, "VRAM_WALKING", &ec);
+            if (got > 0) return got;
+        }
     }
 
     return 0;
@@ -394,14 +405,12 @@ int amds_vram_test_moving_inversions(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_
 
     uint32_t p = 0x00000000u;
     
-    // Pass 1: Fill 0
     clear_err_counter(ctx);
     clSetKernelArg(k_fill, 0, sizeof(cl_mem), &buf);
     clSetKernelArg(k_fill, 1, sizeof(uint32_t), &p);
     clSetKernelArg(k_fill, 2, sizeof(cl_ulong), &words);
     clEnqueueNDRangeKernel(q, k_fill, 1, NULL, &global, NULL, 0, NULL, NULL);
 
-    // Pass 2: Verify 0, then invert (write 1s)
     clSetKernelArg(k_verify, 0, sizeof(cl_mem), &buf);
     clSetKernelArg(k_verify, 1, sizeof(uint32_t), &p);
     clSetKernelArg(k_verify, 2, sizeof(cl_ulong), &words);
@@ -418,7 +427,6 @@ int amds_vram_test_moving_inversions(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_
     int got = read_and_log_errors(gpu, ctx, lg, "VRAM_MOVING_INV_P1", &ec);
     if (got > 0) return got;
 
-    // Pass 3: Verify 1, then invert (write 0s)
     p = 0xFFFFFFFFu;
     clear_err_counter(ctx);
     clSetKernelArg(k_verify, 1, sizeof(uint32_t), &p);
@@ -443,7 +451,7 @@ int amds_vram_test_random_noise(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logge
     cl_ulong words = (cl_ulong)ctx->vram_words;
     size_t global = ((ctx->vram_words + 255) / 256) * 256;
 
-    for (int p = 0; p < 10; p++) {
+    for (int p = 0; p < 20; p++) {
         uint32_t seed = (uint32_t)time(NULL) + p;
         clear_err_counter(ctx);
 

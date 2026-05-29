@@ -71,6 +71,7 @@ typedef struct {
     double power_cap_w;
     double gpu_busy_pct;
     double mem_busy_pct;
+    double fan_rpm;
     uint64_t vram_used;
     uint64_t vram_total;
 } amds_metrics_t;

@@ -26,6 +26,8 @@ typedef struct {
     amds_ui_mode_t mode;
     amds_ocl_ctx_t ocl;
     bool ocl_ready;
+    bool skip_fp32;
+    bool skip_fp64;
     char status[256];
 } amds_tui_state_t;
 
@@ -151,6 +153,10 @@ static void draw_monitor(WINDOW *w, amds_gpu_t *gpus, int gpu_count, int selecte
         wprintw(w, "%5.1f W", g->metrics.power_w);
         wattroff(w, COLOR_PAIR(4));
         wprintw(w, " / %5.1f W", g->metrics.power_cap_w);
+        wprintw(w, "  |  Fan: ");
+        wattron(w, COLOR_PAIR(2));
+        wprintw(w, "%5.0f RPM", g->metrics.fan_rpm);
+        wattroff(w, COLOR_PAIR(2));
         y++;
 
         mvwprintw(w, y++, 4, "RAS:    ECC: %-3s  CE: %-5llu  UE: %-5llu  Bad Pages: %-5llu",
@@ -175,6 +181,8 @@ static void draw_menu(WINDOW *w, const amds_tui_state_t *st) {
         " Mode: Core    ",
         " Mode: Full    ",
         " Start / Stop  ",
+        " Skip FP32     ",
+        " Skip FP64     ",
         " Refresh Now   ",
         " Exit          "
     };
@@ -188,7 +196,7 @@ static void draw_menu(WINDOW *w, const amds_tui_state_t *st) {
 
     int max_x = getmaxx(w);
 
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 9; i++) {
         if (i == st->selected_menu) {
             wattron(w, COLOR_PAIR(1) | A_REVERSE | A_BOLD);
             mvwprintw(w, 2 + i * 2, 2, " %-*s", max_x - 5, items[i]);
@@ -309,15 +317,20 @@ static int run_selected_test(amds_tui_state_t *st, amds_gpu_t *g) {
         amds_vram_test_random_noise(g, &st->ocl, lg);
         log_stage(lg, g, "VRAM_PRNG_BEGIN", "");
         amds_vram_test_prng(g, &st->ocl, lg);
+        amds_vram_clear(&st->ocl);
         snprintf(st->status, sizeof(st->status), "VRAM tests finished");
     } else if (st->mode == AMDS_UI_CORE) {
-        log_stage(lg, g, "CORE_FP32_BEGIN", "");
-        amds_core_stress_fp32(g, &st->ocl, lg);
-        if (st->ocl.has_fp64) {
-            log_stage(lg, g, "CORE_FP64_BEGIN", "");
-            amds_core_stress_fp64(g, &st->ocl, lg);
-        } else {
-            log_stage(lg, g, "CORE_FP64_SKIP", "cl_khr_fp64 unavailable");
+        if (!st->skip_fp32) {
+            log_stage(lg, g, "CORE_FP32_BEGIN", "");
+            amds_core_stress_fp32(g, &st->ocl, lg);
+        }
+        if (!st->skip_fp64) {
+            if (st->ocl.has_fp64) {
+                log_stage(lg, g, "CORE_FP64_BEGIN", "");
+                amds_core_stress_fp64(g, &st->ocl, lg);
+            } else {
+                log_stage(lg, g, "CORE_FP64_SKIP", "cl_khr_fp64 unavailable");
+            }
         }
         snprintf(st->status, sizeof(st->status), "CORE tests finished");
     } else if (st->mode == AMDS_UI_FULL) {
@@ -331,13 +344,19 @@ static int run_selected_test(amds_tui_state_t *st, amds_gpu_t *g) {
         amds_vram_test_random_noise(g, &st->ocl, lg);
         log_stage(lg, g, "VRAM_PRNG_BEGIN", "");
         amds_vram_test_prng(g, &st->ocl, lg);
-        log_stage(lg, g, "CORE_FP32_BEGIN", "");
-        amds_core_stress_fp32(g, &st->ocl, lg);
-        if (st->ocl.has_fp64) {
-            log_stage(lg, g, "CORE_FP64_BEGIN", "");
-            amds_core_stress_fp64(g, &st->ocl, lg);
-        } else {
-            log_stage(lg, g, "CORE_FP64_SKIP", "cl_khr_fp64 unavailable");
+        amds_vram_clear(&st->ocl);
+        
+        if (!st->skip_fp32) {
+            log_stage(lg, g, "CORE_FP32_BEGIN", "");
+            amds_core_stress_fp32(g, &st->ocl, lg);
+        }
+        if (!st->skip_fp64) {
+            if (st->ocl.has_fp64) {
+                log_stage(lg, g, "CORE_FP64_BEGIN", "");
+                amds_core_stress_fp64(g, &st->ocl, lg);
+            } else {
+                log_stage(lg, g, "CORE_FP64_SKIP", "cl_khr_fp64 unavailable");
+            }
         }
         snprintf(st->status, sizeof(st->status), "FULL test finished");
     }
@@ -374,10 +393,18 @@ static void activate_menu(amds_tui_state_t *st, amds_gpu_t *gpus, int gpu_count)
             snprintf(st->status, sizeof(st->status), "execution toggled: running=%s", st->running ? "yes" : "no");
             break;
         case 5:
+            st->skip_fp32 = !st->skip_fp32;
+            snprintf(st->status, sizeof(st->status), "skip_fp32 set to %s", st->skip_fp32 ? "yes" : "no");
+            break;
+        case 6:
+            st->skip_fp64 = !st->skip_fp64;
+            snprintf(st->status, sizeof(st->status), "skip_fp64 set to %s", st->skip_fp64 ? "yes" : "no");
+            break;
+        case 7:
             refresh_all(gpus, gpu_count);
             snprintf(st->status, sizeof(st->status), "manual data refresh complete");
             break;
-        case 6:
+        case 8:
             st->quit = true;
             break;
         default:
