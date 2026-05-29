@@ -93,6 +93,12 @@ static int run_vram_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_cou
         log_stage(lg, &gpus[i], "VRAM_WALKING_BEGIN", "");
         amds_vram_test_walking(&gpus[i], &ctx, lg);
 
+        log_stage(lg, &gpus[i], "VRAM_MOVING_INV_BEGIN", "");
+        amds_vram_test_moving_inversions(&gpus[i], &ctx, lg);
+
+        log_stage(lg, &gpus[i], "VRAM_RANDOM_NOISE_BEGIN", "");
+        amds_vram_test_random_noise(&gpus[i], &ctx, lg);
+
         log_stage(lg, &gpus[i], "VRAM_PRNG_BEGIN", "");
         amds_vram_test_prng(&gpus[i], &ctx, lg);
     }
@@ -142,8 +148,8 @@ static int run_full_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_cou
         return 1;
     }
 
-    for (int pass = 1; pass <= 3; pass++) {
-        if (g_amds_logger) amds_log_printf(g_amds_logger, "[CLI] --- PASS %d/3 ---", pass);
+    for (int pass = 1; pass <= 5; pass++) {
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[CLI] --- PASS %d/5 ---", pass);
 
         for (int i = 0; i < gpu_count; i++) {
             amds_poll_metrics(&gpus[i]);
@@ -154,6 +160,12 @@ static int run_full_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_cou
 
             log_stage(lg, &gpus[i], "VRAM_WALKING_BEGIN", "");
             amds_vram_test_walking(&gpus[i], &ctx, lg);
+
+            log_stage(lg, &gpus[i], "VRAM_MOVING_INV_BEGIN", "");
+            amds_vram_test_moving_inversions(&gpus[i], &ctx, lg);
+
+            log_stage(lg, &gpus[i], "VRAM_RANDOM_NOISE_BEGIN", "");
+            amds_vram_test_random_noise(&gpus[i], &ctx, lg);
 
             log_stage(lg, &gpus[i], "VRAM_PRNG_BEGIN", "");
             amds_vram_test_prng(&gpus[i], &ctx, lg);

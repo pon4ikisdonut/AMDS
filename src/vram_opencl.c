@@ -17,6 +17,9 @@ static const char *amds_vram_src =
 "__kernel void fill_lcg(__global uint *buf, uint seed, ulong words) {\n"
 "  ulong i = get_global_id(0); if (i >= words) return; uint x = (uint)i ^ seed; x = x * 1664525u + 1013904223u; buf[i] = x;\n"
 "}\n"
+"__kernel void invert_pattern(__global uint *buf, ulong words) {\n"
+"  ulong i = get_global_id(0); if (i < words) buf[i] = ~buf[i];\n"
+"}\n"
 "__kernel void verify_lcg(__global uint *buf, uint seed, ulong words, __global uint *err_count, __global err_t *errs) {\n"
 "  ulong i = get_global_id(0); if (i >= words) return; uint x = (uint)i ^ seed; x = x * 1664525u + 1013904223u; uint v = buf[i];\n"
 "  if (v != x) { uint idx = atomic_inc(err_count); if (idx < 2048) { errs[idx].addr = i * 4UL; errs[idx].expected = x; errs[idx].actual = v; } }\n"
@@ -156,6 +159,7 @@ int amds_ocl_init(amds_ocl_ctx_t *ctx) {
     cl_kernel k_verify_pattern = NULL;
     cl_kernel k_fill_lcg = NULL;
     cl_kernel k_verify_lcg = NULL;
+    cl_kernel k_invert_pattern = NULL;
 
     k_fill_pattern = clCreateKernel(prog, "fill_pattern", &err);
     if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create fill_pattern kernel"); goto fail; }
@@ -165,6 +169,8 @@ int amds_ocl_init(amds_ocl_ctx_t *ctx) {
     if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create fill_lcg kernel"); goto fail; }
     k_verify_lcg = clCreateKernel(prog, "verify_lcg", &err);
     if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create verify_lcg kernel"); goto fail; }
+    k_invert_pattern = clCreateKernel(prog, "invert_pattern", &err);
+    if (err != CL_SUCCESS) { if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] failed to create invert_pattern kernel"); goto fail; }
 
     cl_ulong global_mem = 0;
     clGetDeviceInfo(device, CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(global_mem), &global_mem, NULL);
@@ -193,6 +199,7 @@ int amds_ocl_init(amds_ocl_ctx_t *ctx) {
     ctx->k_verify_pattern = k_verify_pattern;
     ctx->k_fill_lcg = k_fill_lcg;
     ctx->k_verify_lcg = k_verify_lcg;
+    ctx->k_invert_pattern = k_invert_pattern;
     ctx->buf_vram = buf_vram;
     ctx->buf_err_count = buf_err_count;
     ctx->buf_errs = buf_errs;
@@ -208,6 +215,7 @@ fail:
     if (ctx->buf_errs) clReleaseMemObject((cl_mem)ctx->buf_errs);
     if (ctx->buf_err_count) clReleaseMemObject((cl_mem)ctx->buf_err_count);
     if (ctx->buf_vram) clReleaseMemObject((cl_mem)ctx->buf_vram);
+    if (k_invert_pattern) clReleaseKernel(k_invert_pattern);
     if (k_verify_lcg) clReleaseKernel(k_verify_lcg);
     if (k_fill_lcg) clReleaseKernel(k_fill_lcg);
     if (k_verify_pattern) clReleaseKernel(k_verify_pattern);
@@ -226,6 +234,7 @@ void amds_ocl_close(amds_ocl_ctx_t *ctx) {
     if (ctx->buf_vram) clReleaseMemObject((cl_mem)ctx->buf_vram);
     if (ctx->k_fp64) clReleaseKernel((cl_kernel)ctx->k_fp64);
     if (ctx->k_fp32) clReleaseKernel((cl_kernel)ctx->k_fp32);
+    if (ctx->k_invert_pattern) clReleaseKernel((cl_kernel)ctx->k_invert_pattern);
     if (ctx->k_verify_lcg) clReleaseKernel((cl_kernel)ctx->k_verify_lcg);
     if (ctx->k_fill_lcg) clReleaseKernel((cl_kernel)ctx->k_fill_lcg);
     if (ctx->k_verify_pattern) clReleaseKernel((cl_kernel)ctx->k_verify_pattern);
@@ -369,4 +378,92 @@ int amds_vram_test_prng(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg)
 
     uint32_t ec = 0;
     return read_and_log_errors(gpu, ctx, lg, "VRAM_PRNG", &ec);
+}
+int amds_vram_test_moving_inversions(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg) {
+    if (!ctx || !ctx->ready) return -1;
+
+    cl_command_queue q = (cl_command_queue)ctx->queue;
+    cl_kernel k_fill = (cl_kernel)ctx->k_fill_pattern;
+    cl_kernel k_verify = (cl_kernel)ctx->k_verify_pattern;
+    cl_kernel k_invert = (cl_kernel)ctx->k_invert_pattern;
+    cl_mem buf = (cl_mem)ctx->buf_vram;
+    cl_mem err_count = (cl_mem)ctx->buf_err_count;
+    cl_mem errs = (cl_mem)ctx->buf_errs;
+    cl_ulong words = (cl_ulong)ctx->vram_words;
+    size_t global = ((ctx->vram_words + 255) / 256) * 256;
+
+    uint32_t p = 0x00000000u;
+    
+    // Pass 1: Fill 0
+    clear_err_counter(ctx);
+    clSetKernelArg(k_fill, 0, sizeof(cl_mem), &buf);
+    clSetKernelArg(k_fill, 1, sizeof(uint32_t), &p);
+    clSetKernelArg(k_fill, 2, sizeof(cl_ulong), &words);
+    clEnqueueNDRangeKernel(q, k_fill, 1, NULL, &global, NULL, 0, NULL, NULL);
+
+    // Pass 2: Verify 0, then invert (write 1s)
+    clSetKernelArg(k_verify, 0, sizeof(cl_mem), &buf);
+    clSetKernelArg(k_verify, 1, sizeof(uint32_t), &p);
+    clSetKernelArg(k_verify, 2, sizeof(cl_ulong), &words);
+    clSetKernelArg(k_verify, 3, sizeof(cl_mem), &err_count);
+    clSetKernelArg(k_verify, 4, sizeof(cl_mem), &errs);
+    clEnqueueNDRangeKernel(q, k_verify, 1, NULL, &global, NULL, 0, NULL, NULL);
+    
+    clSetKernelArg(k_invert, 0, sizeof(cl_mem), &buf);
+    clSetKernelArg(k_invert, 1, sizeof(cl_ulong), &words);
+    clEnqueueNDRangeKernel(q, k_invert, 1, NULL, &global, NULL, 0, NULL, NULL);
+    clFinish(q);
+
+    uint32_t ec = 0;
+    int got = read_and_log_errors(gpu, ctx, lg, "VRAM_MOVING_INV_P1", &ec);
+    if (got > 0) return got;
+
+    // Pass 3: Verify 1, then invert (write 0s)
+    p = 0xFFFFFFFFu;
+    clear_err_counter(ctx);
+    clSetKernelArg(k_verify, 1, sizeof(uint32_t), &p);
+    clEnqueueNDRangeKernel(q, k_verify, 1, NULL, &global, NULL, 0, NULL, NULL);
+    
+    clEnqueueNDRangeKernel(q, k_invert, 1, NULL, &global, NULL, 0, NULL, NULL);
+    clFinish(q);
+
+    got = read_and_log_errors(gpu, ctx, lg, "VRAM_MOVING_INV_P2", &ec);
+    return got;
+}
+
+int amds_vram_test_random_noise(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg) {
+    if (!ctx || !ctx->ready) return -1;
+
+    cl_command_queue q = (cl_command_queue)ctx->queue;
+    cl_kernel k_fill = (cl_kernel)ctx->k_fill_lcg;
+    cl_kernel k_verify = (cl_kernel)ctx->k_verify_lcg;
+    cl_mem buf = (cl_mem)ctx->buf_vram;
+    cl_mem err_count = (cl_mem)ctx->buf_err_count;
+    cl_mem errs = (cl_mem)ctx->buf_errs;
+    cl_ulong words = (cl_ulong)ctx->vram_words;
+    size_t global = ((ctx->vram_words + 255) / 256) * 256;
+
+    for (int p = 0; p < 10; p++) {
+        uint32_t seed = (uint32_t)time(NULL) + p;
+        clear_err_counter(ctx);
+
+        clSetKernelArg(k_fill, 0, sizeof(cl_mem), &buf);
+        clSetKernelArg(k_fill, 1, sizeof(uint32_t), &seed);
+        clSetKernelArg(k_fill, 2, sizeof(cl_ulong), &words);
+        clEnqueueNDRangeKernel(q, k_fill, 1, NULL, &global, NULL, 0, NULL, NULL);
+
+        clSetKernelArg(k_verify, 0, sizeof(cl_mem), &buf);
+        clSetKernelArg(k_verify, 1, sizeof(uint32_t), &seed);
+        clSetKernelArg(k_verify, 2, sizeof(cl_ulong), &words);
+        clSetKernelArg(k_verify, 3, sizeof(cl_mem), &err_count);
+        clSetKernelArg(k_verify, 4, sizeof(cl_mem), &errs);
+        clEnqueueNDRangeKernel(q, k_verify, 1, NULL, &global, NULL, 0, NULL, NULL);
+        clFinish(q);
+
+        uint32_t ec = 0;
+        int got = read_and_log_errors(gpu, ctx, lg, "VRAM_RANDOM_NOISE", &ec);
+        if (got > 0) return got;
+    }
+
+    return 0;
 }

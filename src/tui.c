@@ -303,6 +303,10 @@ static int run_selected_test(amds_tui_state_t *st, amds_gpu_t *g) {
         amds_vram_test_pattern(g, &st->ocl, lg);
         log_stage(lg, g, "VRAM_WALKING_BEGIN", "");
         amds_vram_test_walking(g, &st->ocl, lg);
+        log_stage(lg, g, "VRAM_MOVING_INV_BEGIN", "");
+        amds_vram_test_moving_inversions(g, &st->ocl, lg);
+        log_stage(lg, g, "VRAM_RANDOM_NOISE_BEGIN", "");
+        amds_vram_test_random_noise(g, &st->ocl, lg);
         log_stage(lg, g, "VRAM_PRNG_BEGIN", "");
         amds_vram_test_prng(g, &st->ocl, lg);
         snprintf(st->status, sizeof(st->status), "VRAM tests finished");
@@ -321,6 +325,10 @@ static int run_selected_test(amds_tui_state_t *st, amds_gpu_t *g) {
         amds_vram_test_pattern(g, &st->ocl, lg);
         log_stage(lg, g, "VRAM_WALKING_BEGIN", "");
         amds_vram_test_walking(g, &st->ocl, lg);
+        log_stage(lg, g, "VRAM_MOVING_INV_BEGIN", "");
+        amds_vram_test_moving_inversions(g, &st->ocl, lg);
+        log_stage(lg, g, "VRAM_RANDOM_NOISE_BEGIN", "");
+        amds_vram_test_random_noise(g, &st->ocl, lg);
         log_stage(lg, g, "VRAM_PRNG_BEGIN", "");
         amds_vram_test_prng(g, &st->ocl, lg);
         log_stage(lg, g, "CORE_FP32_BEGIN", "");

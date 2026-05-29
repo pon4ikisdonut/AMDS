@@ -46,6 +46,7 @@ typedef struct {
     void *k_verify_pattern;
     void *k_fill_lcg;
     void *k_verify_lcg;
+    void *k_invert_pattern;
     void *k_fp32;
     void *k_fp64;
     void *buf_vram;
@@ -76,6 +77,8 @@ void amds_ocl_close(amds_ocl_ctx_t *ctx);
 
 int amds_vram_test_pattern(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg);
 int amds_vram_test_walking(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg);
+int amds_vram_test_moving_inversions(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg);
+int amds_vram_test_random_noise(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg);
 int amds_vram_test_prng(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg);
 
 int amds_core_stress_fp32(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg);
