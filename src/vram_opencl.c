@@ -54,24 +54,41 @@ static void log_vram_err(amds_gpu_t *gpu, amds_logger_t *lg, const char *stage, 
 
 static int pick_amd_gpu(cl_platform_id *out_p, cl_device_id *out_d) {
     cl_uint pcount = 0;
-    if (clGetPlatformIDs(0, NULL, &pcount) != CL_SUCCESS || !pcount) return -1;
+    cl_int err = clGetPlatformIDs(0, NULL, &pcount);
+    
+    if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] clGetPlatformIDs returned %d, pcount=%u", err, pcount);
+    
+    if (err != CL_SUCCESS || !pcount) return -1;
 
     cl_platform_id *plats = calloc(pcount, sizeof(*plats));
     if (!plats) return -1;
     clGetPlatformIDs(pcount, plats, NULL);
 
     for (cl_uint p = 0; p < pcount; p++) {
+        char p_name[256] = {0}, p_vend[256] = {0};
+        clGetPlatformInfo(plats[p], CL_PLATFORM_NAME, sizeof(p_name), p_name, NULL);
+        clGetPlatformInfo(plats[p], CL_PLATFORM_VENDOR, sizeof(p_vend), p_vend, NULL);
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] platform[%u]: %s (%s)", p, p_name, p_vend);
+
         cl_uint dcount = 0;
-        if (clGetDeviceIDs(plats[p], CL_DEVICE_TYPE_GPU, 0, NULL, &dcount) != CL_SUCCESS || !dcount) continue;
+        err = clGetDeviceIDs(plats[p], CL_DEVICE_TYPE_GPU, 0, NULL, &dcount);
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] platform[%u] clGetDeviceIDs returned %d, dcount=%u", p, err, dcount);
+        
+        if (err != CL_SUCCESS || !dcount) continue;
 
         cl_device_id *devs = calloc(dcount, sizeof(*devs));
         if (!devs) continue;
         clGetDeviceIDs(plats[p], CL_DEVICE_TYPE_GPU, dcount, devs, NULL);
 
         for (cl_uint d = 0; d < dcount; d++) {
-            char vendor[256] = {0};
+            char name[256] = {0}, vendor[256] = {0};
+            clGetDeviceInfo(devs[d], CL_DEVICE_NAME, sizeof(name), name, NULL);
             clGetDeviceInfo(devs[d], CL_DEVICE_VENDOR, sizeof(vendor), vendor, NULL);
+            
+            if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] platform[%u] device[%u]: %s (%s)", p, d, name, vendor);
+
             if (strstr(vendor, "AMD") || strstr(vendor, "Advanced Micro Devices")) {
+                if (g_amds_logger) amds_log_printf(g_amds_logger, "[OCL] match found: %s", name);
                 *out_p = plats[p];
                 *out_d = devs[d];
                 free(devs);

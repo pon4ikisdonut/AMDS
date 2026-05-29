@@ -118,6 +118,10 @@ static int run_core_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_cou
         amds_core_stress_fp32(&gpus[i], &ctx, lg);
 
         if (ctx.has_fp64) {
+            log_stage(lg, &gpus[i], "COOLING_PAUSE", "20s");
+            if (g_amds_logger) amds_log_printf(g_amds_logger, "[CLI] Cooling down for 20s before FP64...");
+            sleep(20);
+
             log_stage(lg, &gpus[i], "CORE_FP64_BEGIN", "");
             amds_core_stress_fp64(&gpus[i], &ctx, lg);
         } else {
@@ -138,32 +142,40 @@ static int run_full_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_cou
         return 1;
     }
 
-    for (int i = 0; i < gpu_count; i++) {
-        amds_poll_metrics(&gpus[i]);
-        amds_poll_ras(&gpus[i]);
+    for (int pass = 1; pass <= 3; pass++) {
+        if (g_amds_logger) amds_log_printf(g_amds_logger, "[CLI] --- PASS %d/3 ---", pass);
 
-        log_stage(lg, &gpus[i], "VRAM_PATTERN_BEGIN", "");
-        amds_vram_test_pattern(&gpus[i], &ctx, lg);
+        for (int i = 0; i < gpu_count; i++) {
+            amds_poll_metrics(&gpus[i]);
+            amds_poll_ras(&gpus[i]);
 
-        log_stage(lg, &gpus[i], "VRAM_WALKING_BEGIN", "");
-        amds_vram_test_walking(&gpus[i], &ctx, lg);
+            log_stage(lg, &gpus[i], "VRAM_PATTERN_BEGIN", "");
+            amds_vram_test_pattern(&gpus[i], &ctx, lg);
 
-        log_stage(lg, &gpus[i], "VRAM_PRNG_BEGIN", "");
-        amds_vram_test_prng(&gpus[i], &ctx, lg);
+            log_stage(lg, &gpus[i], "VRAM_WALKING_BEGIN", "");
+            amds_vram_test_walking(&gpus[i], &ctx, lg);
 
-        log_stage(lg, &gpus[i], "CORE_FP32_BEGIN", "");
-        amds_core_stress_fp32(&gpus[i], &ctx, lg);
+            log_stage(lg, &gpus[i], "VRAM_PRNG_BEGIN", "");
+            amds_vram_test_prng(&gpus[i], &ctx, lg);
 
-        if (ctx.has_fp64) {
-            log_stage(lg, &gpus[i], "CORE_FP64_BEGIN", "");
-            amds_core_stress_fp64(&gpus[i], &ctx, lg);
-        } else {
-            log_stage(lg, &gpus[i], "CORE_FP64_SKIP", "cl_khr_fp64 unavailable");
+            log_stage(lg, &gpus[i], "CORE_FP32_BEGIN", "");
+            amds_core_stress_fp32(&gpus[i], &ctx, lg);
+
+            if (ctx.has_fp64) {
+                log_stage(lg, &gpus[i], "COOLING_PAUSE", "20s");
+                if (g_amds_logger) amds_log_printf(g_amds_logger, "[CLI] Cooling down for 20s before FP64...");
+                sleep(20);
+
+                log_stage(lg, &gpus[i], "CORE_FP64_BEGIN", "");
+                amds_core_stress_fp64(&gpus[i], &ctx, lg);
+            } else {
+                log_stage(lg, &gpus[i], "CORE_FP64_SKIP", "cl_khr_fp64 unavailable");
+            }
+
+            amds_poll_metrics(&gpus[i]);
+            amds_poll_ras(&gpus[i]);
+            print_gpu_line(&gpus[i]);
         }
-
-        amds_poll_metrics(&gpus[i]);
-        amds_poll_ras(&gpus[i]);
-        print_gpu_line(&gpus[i]);
     }
 
     amds_ocl_close(&ctx);
