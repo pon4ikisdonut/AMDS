@@ -119,7 +119,7 @@ int amds_core_stress_fp32(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *l
     }
 
     uint32_t total_loops = 1000000;
-    uint32_t chunk_size = 50000;
+    uint32_t chunk_size = 15000;
     cl_mem buf = (cl_mem)ctx->buf_stress;
     clSetKernelArg(k, 0, sizeof(cl_mem), &buf);
     clSetKernelArg(k, 1, sizeof(uint32_t), &chunk_size);
@@ -162,7 +162,7 @@ int amds_core_stress_fp64(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *l
     }
 
     uint32_t total_loops = 300000;
-    uint32_t chunk_size = 15000;
+    uint32_t chunk_size = 8000;
     cl_mem buf = (cl_mem)ctx->buf_stress;
     clSetKernelArg(k, 0, sizeof(cl_mem), &buf);
     clSetKernelArg(k, 1, sizeof(uint32_t), &chunk_size);
