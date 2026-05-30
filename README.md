@@ -1,4 +1,4 @@
-# AMDS v0.1.1
+# AMDS v0.2.1
 
 AMDS is an AMD GPU diagnostics suite for Linux, written in C.
 
@@ -154,3 +154,5 @@ On exit, AMDS writes:
 This software can heavily stress GPUs and may freeze unstable hardware or the full system.
 
 Use it at your own risk.
+
+:3

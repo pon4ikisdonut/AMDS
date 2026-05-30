@@ -171,7 +171,6 @@ int amds_core_stress_fp32(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *l
 
     if (g_amds_logger) {
         amds_log_printf(g_amds_logger, "[STRESS] starting FP32 stress on GPU%d", gpu->index);
-        // Ensure log is flushed to disk before starting
         if (g_amds_logger->fp) fflush(g_amds_logger->fp);
     }
     
