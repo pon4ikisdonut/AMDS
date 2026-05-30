@@ -4,155 +4,93 @@ AMDS is an AMD GPU diagnostics suite for Linux, written in C.
 
 It is designed for:
 
-- multi-GPU monitoring
-- VRAM diagnostics
-- GPU core stress testing
-- RAS error ingestion
-- crash-resistant logging
-- ncurses TUI
-- CLI automation
-- JSON/CSV/report export
-- heuristic fault localization by GPU family
+- **Multi-GPU monitoring** (Clocks, Temps, Power, Usage, VRAM)
+- **VRAM diagnostics** (Pattern, Walking 1s, Moving Inversions, Random Noise, PRNG)
+- **GPU core stress testing** (FP32 and FP64 heavy compute kernels)
+- **RAS error ingestion** (Corrected/Uncorrected errors, Bad Pages)
+- **Kmsg monitoring** (Capturing driver/hardware errors during tests)
+- **Crash-resistant logging** (Synchronous disk writes for post-mortem analysis)
+- **ncurses TUI** (Interactive monitoring and control)
+- **CLI automation** (Scriptable execution modes)
+- **Flexible Export** (JSON, CSV, and Markdown report generation)
+- **Heuristic fault localization** by GPU family (Polaris, Vega, Navi, etc.)
 
 ## Scope
 
-AMDS uses Linux interfaces that are publicly available and practical for diagnostics:
+AMDS uses public Linux interfaces for diagnostics:
+- **Sysfs** (`/sys/class/drm/cardX/device/...`) for telemetry and metrics.
+- **Hwmon** for temperatures and fan speeds.
+- **Debugfs** (optional) for advanced RAS status.
+- **OpenCL** for VRAM and Core stress testing.
+- **Kmsg** for kernel log monitoring.
 
-- `sysfs`
-- `hwmon`
-- `amdgpu` telemetry files
-- `amdgpu` RAS sysfs nodes
-- OpenCL for VRAM/core stress
+## Installation
 
-AMDS does **not** claim a universal exact physical DRAM bank/row/column decoder for all AMD generations.
+### Dependencies
 
-Where exact mapping is not publicly available, AMDS uses logical family-specific heuristics.
+- **GCC**, **Make**
+- **Ncursesw** (for TUI)
+- **OpenCL Headers & Loader** (for stress tests)
+- **Amdgpu** driver with compute support
 
-## Current feature set
+On Ubuntu/Debian:
+```bash
+sudo apt install build-essential libncursesw5-dev ocl-icd-opencl-dev
+```
 
-- AMD GPU discovery through `/sys/class/drm`
-- `radeon` / `amdgpu` driver detection
-- one-second telemetry polling
-- RAS bad page and error counter ingestion
-- CLI mode
-- ncurses TUI mode
-- OpenCL VRAM tests:
-  - pattern
-  - walking bits
-  - PRNG
-- OpenCL core stress:
-  - FP32
-  - FP64 when `cl_khr_fp64` is available
-- unbuffered log flushing using `fflush()` and `fsync()`
-- export to JSON, CSV, and Markdown report
-- English-only output files and UI strings
-
-## Build
+### Build
 
 ```bash
-sudo apt update
-sudo apt install build-essential libncursesw5-dev ocl-icd-opencl-dev opencl-headers clinfo
 make
 ```
 
-## Run
+## Usage
 
-TUI:
+### TUI Mode (Interactive)
 
+Launch the interactive interface:
 ```bash
 sudo ./amds
 ```
+*(Root privileges are required to access some sysfs/debugfs nodes and for kmsg monitoring).*
 
-CLI monitor:
+### CLI Mode (Automation)
 
+Run a specific diagnostic mode:
 ```bash
-sudo ./amds --cli --mode monitor --duration 30
+sudo ./amds --cli --mode [monitor|vram|core|full] --duration 60
 ```
 
-CLI VRAM tests:
+#### CLI Arguments:
 
-```bash
-sudo ./amds --cli --mode vram
-```
+- `--cli`: Enable CLI mode (disables TUI).
+- `--mode <mode>`: Diagnostic mode:
+    - `monitor`: Continuous telemetry monitoring (default).
+    - `vram`: Run VRAM pattern and noise tests.
+    - `core`: Run heavy FP32/FP64 compute kernels.
+    - `full`: Combined stress test (5 passes of VRAM + Core).
+- `--duration <sec>`: Duration for monitor mode (default: 60s).
+- `--poll-ms <ms>`: Telemetry polling interval (default: 1000ms).
+- `--gpu <id>`: Filter by GPU index or "all" (default: all).
+- `--json <path>`: Path for JSON telemetry export.
+- `--csv-dir <dir>`: Directory for CSV telemetry export.
+- `--report <path>`: Path for the final Markdown report.
+- `--log <path>`: Path for the diagnostic log.
+- `--max-edge-temp <c>`: Edge temperature threshold for adaptive throttling.
+- `--max-hotspot-temp <c>`: Hotspot temperature threshold.
+- `--max-power <w>`: Power consumption threshold.
+- `--no-adaptive`: Disable temperature-based stress test throttling.
 
-CLI core stress:
+## Output
 
-```bash
-sudo ./amds --cli --mode core
-```
-
-CLI full suite:
-
-```bash
-sudo ./amds --cli --mode full
-```
-
-## TUI controls
-
-- `Left` / `Right` — select GPU
-- `Up` / `Down` — move in control menu
-- `Enter` — activate selected menu item
-- `r` — refresh now
-- `q` — quit
-
-## Modes
-
-### monitor
-
-Only telemetry and RAS polling.
-
-### vram
-
-Runs:
-
-- pattern test
-- walking bits
-- PRNG sequence test
-
-### core
-
-Runs:
-
-- FP32 compute stress
-- FP64 compute stress if the OpenCL device supports `cl_khr_fp64`
-
-### full
-
-Runs all VRAM tests and then core stress.
-
-## Polaris mapping
-
-For Polaris-family boards, AMDS uses a dedicated burst-slot remap model to cluster failures into logical chips/channels rather than a flat modulo map.
-
-This is intended as a practical repair-oriented heuristic for common 8-chip Polaris layouts.
-
-## Logging
-
-The program writes to:
-
-```text
-./amds_diag.log
-```
-
-Each line is flushed immediately with:
-
-- `fflush()`
-- `fsync()`
-
-This is done to preserve as much telemetry and failure evidence as possible during hard hangs.
-
-## Exports
-
-On exit, AMDS writes:
-
-- `exports/amds.json`
-- `exports/telemetry.csv`
-- `exports/report.md`
+On exit, AMDS generates:
+- `amds_diag.log`: Detailed timestamped execution log.
+- `exports/amds.json`: Machine-readable telemetry data.
+- `exports/telemetry.csv`: Time-series data for graphing.
+- `exports/report.md`: Human-readable diagnostic summary.
 
 ## Safety
 
 This software can heavily stress GPUs and may freeze unstable hardware or the full system.
 
-Use it at your own risk.
-
-:3
+**Use it at your own risk.**
