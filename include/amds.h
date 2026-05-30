@@ -82,6 +82,9 @@ int amds_vram_test_random_noise(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logge
 int amds_vram_test_prng(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg);
 void amds_vram_clear(amds_ocl_ctx_t *ctx);
 
+int amds_kmsg_monitor_start(amds_logger_t *lg);
+void amds_kmsg_monitor_stop(void);
+
 int amds_core_stress_fp32(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg);
 int amds_core_stress_fp64(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg);
 
