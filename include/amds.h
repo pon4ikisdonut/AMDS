@@ -80,6 +80,7 @@ int amds_vram_test_walking(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *
 int amds_vram_test_moving_inversions(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg);
 int amds_vram_test_random_noise(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg);
 int amds_vram_test_prng(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg);
+void amds_vram_clear(amds_ocl_ctx_t *ctx);
 
 int amds_core_stress_fp32(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg);
 int amds_core_stress_fp64(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *lg);

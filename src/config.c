@@ -19,9 +19,11 @@ void amds_config_defaults(amds_config_t *cfg) {
     cfg->max_hotspot_temp = 100.0;
     cfg->max_power_w = 350.0;
     cfg->max_vddc_jitter_mv = 35.0;
-    cfg->max_vddci_jitter_mv = 25.0;
-    cfg->vram_fraction = 0.25;
-}
+    cfg->max_vddci_jitter_mv = 50.0;
+    cfg->vram_fraction = 0.9;
+    cfg->skip_fp32 = false;
+    cfg->skip_fp64 = false;
+    }
 
 static int need_arg(int i, int argc) {
     return i + 1 < argc;

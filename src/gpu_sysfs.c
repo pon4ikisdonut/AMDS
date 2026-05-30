@@ -88,7 +88,19 @@ int amds_poll_metrics(amds_gpu_t *gpu) {
             }
         }
         read_metric_double(gpu->hwmon_path, "power1_cap", 1000000.0, &gpu->metrics.power_cap_w);
-        read_metric_double(gpu->hwmon_path, "fan1_input", 1.0, &gpu->metrics.fan_rpm);
+
+        double total_fan_rpm = 0.0;
+        int fan_count = 0;
+        for (int i = 1; i <= 8; i++) {
+            char fan_name[16];
+            double rpm;
+            snprintf(fan_name, sizeof(fan_name), "fan%d_input", i);
+            if (read_metric_double(gpu->hwmon_path, fan_name, 1.0, &rpm) == 0) {
+                total_fan_rpm += rpm;
+                fan_count++;
+            }
+        }
+        gpu->metrics.fan_rpm = (fan_count > 0) ? (total_fan_rpm / fan_count) : 0.0;
     }
 
     if (g_amds_logger) {

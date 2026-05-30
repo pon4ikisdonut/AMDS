@@ -14,7 +14,7 @@ int amds_logger_init(amds_logger_t *lg, const char *path) {
     pthread_mutex_init(&lg->lock, NULL);
     snprintf(lg->path, sizeof(lg->path), "%s", path);
 
-    lg->fd = open(path, O_CREAT | O_WRONLY | O_APPEND, 0644);
+    lg->fd = open(path, O_CREAT | O_WRONLY | O_APPEND | O_SYNC, 0644);
     if (lg->fd < 0) return -1;
 
     lg->fp = fdopen(lg->fd, "a");

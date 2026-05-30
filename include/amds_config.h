@@ -28,6 +28,8 @@ typedef struct {
     double max_vddc_jitter_mv;
     double max_vddci_jitter_mv;
     double vram_fraction;
+    bool skip_fp32;
+    bool skip_fp64;
 } amds_config_t;
 
 void amds_config_defaults(amds_config_t *cfg);

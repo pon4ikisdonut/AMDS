@@ -118,16 +118,20 @@ int amds_core_stress_fp32(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *l
         }
     }
 
-    uint32_t loops = 1000000;
+    uint32_t total_loops = 1000000;
+    uint32_t chunk_size = 50000;
     cl_mem buf = (cl_mem)ctx->buf_stress;
     clSetKernelArg(k, 0, sizeof(cl_mem), &buf);
-    clSetKernelArg(k, 1, sizeof(uint32_t), &loops);
+    clSetKernelArg(k, 1, sizeof(uint32_t), &chunk_size);
 
     size_t global = elems;
-    err = clEnqueueNDRangeKernel(q, k, 1, NULL, &global, NULL, 0, NULL, NULL);
-    if (err != CL_SUCCESS) {
-        if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] kernel launch failed: %d", err);
-        return -1;
+    for (uint32_t i = 0; i < total_loops / chunk_size; i++) {
+        err = clEnqueueNDRangeKernel(q, k, 1, NULL, &global, NULL, 0, NULL, NULL);
+        if (err != CL_SUCCESS) {
+            if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] kernel launch failed at chunk %u: %d", i, err);
+            return -1;
+        }
+        clFlush(q);
     }
 
     clFinish(q);
@@ -157,16 +161,20 @@ int amds_core_stress_fp64(amds_gpu_t *gpu, amds_ocl_ctx_t *ctx, amds_logger_t *l
         }
     }
 
-    uint32_t loops = 300000;
+    uint32_t total_loops = 300000;
+    uint32_t chunk_size = 15000;
     cl_mem buf = (cl_mem)ctx->buf_stress;
     clSetKernelArg(k, 0, sizeof(cl_mem), &buf);
-    clSetKernelArg(k, 1, sizeof(uint32_t), &loops);
+    clSetKernelArg(k, 1, sizeof(uint32_t), &chunk_size);
 
     size_t global = elems;
-    err = clEnqueueNDRangeKernel(q, k, 1, NULL, &global, NULL, 0, NULL, NULL);
-    if (err != CL_SUCCESS) {
-        if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] kernel launch failed: %d", err);
-        return -1;
+    for (uint32_t i = 0; i < total_loops / chunk_size; i++) {
+        err = clEnqueueNDRangeKernel(q, k, 1, NULL, &global, NULL, 0, NULL, NULL);
+        if (err != CL_SUCCESS) {
+            if (g_amds_logger) amds_log_printf(g_amds_logger, "[STRESS] kernel launch failed at chunk %u: %d", i, err);
+            return -1;
+        }
+        clFlush(q);
     }
 
     clFinish(q);

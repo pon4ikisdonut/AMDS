@@ -26,8 +26,6 @@ typedef struct {
     amds_ui_mode_t mode;
     amds_ocl_ctx_t ocl;
     bool ocl_ready;
-    bool skip_fp32;
-    bool skip_fp64;
     char status[256];
 } amds_tui_state_t;
 
@@ -274,7 +272,7 @@ static void refresh_all(amds_gpu_t *gpus, int gpu_count) {
     }
 }
 
-static int run_selected_test(amds_tui_state_t *st, amds_gpu_t *g) {
+static int run_selected_test(amds_tui_state_t *st, amds_gpu_t *g, const amds_config_t *cfg) {
     amds_logger_t *lg = g_amds_logger;
     bool own_lg = false;
 
@@ -320,11 +318,11 @@ static int run_selected_test(amds_tui_state_t *st, amds_gpu_t *g) {
         amds_vram_clear(&st->ocl);
         snprintf(st->status, sizeof(st->status), "VRAM tests finished");
     } else if (st->mode == AMDS_UI_CORE) {
-        if (!st->skip_fp32) {
+        if (!cfg->skip_fp32) {
             log_stage(lg, g, "CORE_FP32_BEGIN", "");
             amds_core_stress_fp32(g, &st->ocl, lg);
         }
-        if (!st->skip_fp64) {
+        if (!cfg->skip_fp64) {
             if (st->ocl.has_fp64) {
                 log_stage(lg, g, "CORE_FP64_BEGIN", "");
                 amds_core_stress_fp64(g, &st->ocl, lg);
@@ -345,12 +343,12 @@ static int run_selected_test(amds_tui_state_t *st, amds_gpu_t *g) {
         log_stage(lg, g, "VRAM_PRNG_BEGIN", "");
         amds_vram_test_prng(g, &st->ocl, lg);
         amds_vram_clear(&st->ocl);
-        
-        if (!st->skip_fp32) {
+
+        if (!cfg->skip_fp32) {
             log_stage(lg, g, "CORE_FP32_BEGIN", "");
             amds_core_stress_fp32(g, &st->ocl, lg);
         }
-        if (!st->skip_fp64) {
+        if (!cfg->skip_fp64) {
             if (st->ocl.has_fp64) {
                 log_stage(lg, g, "CORE_FP64_BEGIN", "");
                 amds_core_stress_fp64(g, &st->ocl, lg);
@@ -363,14 +361,13 @@ static int run_selected_test(amds_tui_state_t *st, amds_gpu_t *g) {
 
     amds_poll_metrics(g);
     amds_poll_ras(g);
-    
+
     if (g_amds_logger) amds_log_printf(g_amds_logger, "[TUI] test sequence finished for GPU%d", g->index);
     if (own_lg) { amds_logger_close(lg); free(lg); }
     return 0;
 }
 
-
-static void activate_menu(amds_tui_state_t *st, amds_gpu_t *gpus, int gpu_count) {
+static void activate_menu(amds_tui_state_t *st, amds_gpu_t *gpus, int gpu_count, amds_config_t *cfg) {
     switch (st->selected_menu) {
         case 0:
             st->mode = AMDS_UI_MONITOR;
@@ -393,12 +390,12 @@ static void activate_menu(amds_tui_state_t *st, amds_gpu_t *gpus, int gpu_count)
             snprintf(st->status, sizeof(st->status), "execution toggled: running=%s", st->running ? "yes" : "no");
             break;
         case 5:
-            st->skip_fp32 = !st->skip_fp32;
-            snprintf(st->status, sizeof(st->status), "skip_fp32 set to %s", st->skip_fp32 ? "yes" : "no");
+            cfg->skip_fp32 = !cfg->skip_fp32;
+            snprintf(st->status, sizeof(st->status), "skip_fp32 set to %s", cfg->skip_fp32 ? "yes" : "no");
             break;
         case 6:
-            st->skip_fp64 = !st->skip_fp64;
-            snprintf(st->status, sizeof(st->status), "skip_fp64 set to %s", st->skip_fp64 ? "yes" : "no");
+            cfg->skip_fp64 = !cfg->skip_fp64;
+            snprintf(st->status, sizeof(st->status), "skip_fp64 set to %s", cfg->skip_fp64 ? "yes" : "no");
             break;
         case 7:
             refresh_all(gpus, gpu_count);
@@ -478,7 +475,7 @@ int amds_run_tui(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_count) {
                 if (st.selected_menu > 0) st.selected_menu--;
                 break;
             case KEY_DOWN:
-                if (st.selected_menu < 6) st.selected_menu++;
+                if (st.selected_menu < 8) st.selected_menu++;
                 break;
             case KEY_LEFT:
                 if (st.selected_gpu > 0) st.selected_gpu--;
@@ -489,7 +486,7 @@ int amds_run_tui(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_count) {
             case '\n':
             case '\r':
             case KEY_ENTER:
-                activate_menu(&st, gpus, gpu_count);
+                activate_menu(&st, gpus, gpu_count, (amds_config_t *)cfg);
                 break;
             case 'r':
             case 'R':
@@ -513,7 +510,7 @@ int amds_run_tui(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_count) {
         }
 
         if (st.running) {
-            run_selected_test(&st, &gpus[st.selected_gpu]);
+            run_selected_test(&st, &gpus[st.selected_gpu], (amds_config_t *)cfg);
             st.running = false;
         }
 
