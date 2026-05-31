@@ -29,11 +29,41 @@ static int need_arg(int i, int argc) {
     return i + 1 < argc;
 }
 
+static void print_help(void) {
+    printf("AMDS v%s - AMD GPU Diagnostics Suite\n\n", AMDS_VERSION_STRING);
+    printf("Usage: amds [options]\n\n");
+    printf("General Options:\n");
+    printf("  --cli                Enable CLI mode (disable TUI)\n");
+    printf("  --gpu <id>           Select GPU index or 'all' (default: all)\n");
+    printf("  --mode <mode>        Set diagnostic mode: monitor, vram, core, full (default: monitor)\n");
+    printf("  --duration <sec>     Test duration in seconds (for monitor mode, default: 60)\n");
+    printf("  --poll-ms <ms>       Polling interval in milliseconds (default: 1000)\n");
+    printf("  --quiet              Reduce output verbosity\n");
+    printf("  --help, -h           Show this help message\n");
+    printf("  --version, -v        Show version information\n\n");
+    printf("Thresholds & Limits:\n");
+    printf("  --max-edge-temp <c>    Edge temperature threshold for adaptive throttling (default: 85.0)\n");
+    printf("  --max-hotspot-temp <c> Hotspot temperature threshold (default: 100.0)\n");
+    printf("  --max-power <w>        Power consumption threshold (default: 350.0)\n");
+    printf("  --no-adaptive          Disable temperature-based stress test throttling\n\n");
+    printf("Export Options:\n");
+    printf("  --json <path>        Path for JSON telemetry export (default: exports/amds.json)\n");
+    printf("  --csv-dir <dir>      Directory for CSV telemetry export (default: exports)\n");
+    printf("  --report <path>      Path for Markdown report (default: exports/report.md)\n");
+    printf("  --log <path>         Path for diagnostic log (default: ./amds_diag.log)\n\n");
+}
+
 int amds_config_parse_cli(amds_config_t *cfg, int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--cli")) {
             cfg->cli_mode = true;
             cfg->use_tui = false;
+        } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
+            print_help();
+            exit(0);
+        } else if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-v")) {
+            printf("AMDS v%s\n", AMDS_VERSION_STRING);
+            exit(0);
         } else if (!strcmp(argv[i], "--quiet")) {
             cfg->quiet = true;
         } else if (!strcmp(argv[i], "--gpu") && need_arg(i, argc)) {

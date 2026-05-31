@@ -1,5 +1,6 @@
 #include "../include/amds.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <signal.h>
@@ -59,8 +60,14 @@ int main(int argc, char **argv) {
     }
 
     int j = 0;
+    bool select_all = !strcmp(cfg.gpu_selector, "all");
+    int selected_idx = select_all ? -1 : atoi(cfg.gpu_selector);
+
     for (int i = 0; i < gpu_count; i++) {
         if (gpus[i].driver == AMDS_DRV_AMDGPU || gpus[i].driver == AMDS_DRV_RADEON) {
+            if (!select_all && gpus[i].index != selected_idx) {
+                continue;
+            }
             if (i != j) {
                 gpus[j] = gpus[i];
             }
@@ -70,7 +77,11 @@ int main(int argc, char **argv) {
     gpu_count = j;
 
     if (gpu_count <= 0) {
-        fprintf(stderr, "AMDS: no AMD GPUs found after filtering\n");
+        if (!select_all) {
+            fprintf(stderr, "AMDS: GPU index %d not found or not an AMD GPU\n", selected_idx);
+        } else {
+            fprintf(stderr, "AMDS: no AMD GPUs found after filtering\n");
+        }
         return 1;
     }
 

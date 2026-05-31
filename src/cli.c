@@ -56,15 +56,18 @@ static void sleep_ms(unsigned ms) {
 static int run_monitor_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_count, amds_logger_t *lg) {
     time_t start = time(NULL);
 
+    if (!cfg->quiet) {
+        printf("AMDS v%s - Monitoring %d GPU(s)\n", amds_version_string(), gpu_count);
+        printf("Press Ctrl+C to stop.\n\n");
+    }
+
     while (1) {
-        printf("=== AMDS %s ===\n", amds_version_string());
         for (int i = 0; i < gpu_count; i++) {
             amds_poll_metrics(&gpus[i]);
             amds_poll_ras(&gpus[i]);
             print_gpu_line(&gpus[i]);
             log_stage(lg, &gpus[i], "MONITOR", "TICK");
         }
-        printf("\n");
         fflush(stdout);
 
         if (cfg->duration_sec > 0 && (time(NULL) - start) >= cfg->duration_sec) break;
@@ -77,6 +80,8 @@ static int run_monitor_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_
 static int run_vram_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_count, amds_logger_t *lg) {
     (void)cfg;
 
+    if (!cfg->quiet) printf("[CLI] Starting VRAM diagnostics...\n");
+
     amds_ocl_ctx_t ctx;
     if (amds_ocl_init(&ctx) < 0) {
         fprintf(stderr, "AMDS: OpenCL init failed\n");
@@ -84,31 +89,41 @@ static int run_vram_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_cou
     }
 
     for (int i = 0; i < gpu_count; i++) {
+        if (!cfg->quiet) printf("[CLI] Testing GPU%d (%s)...\n", gpus[i].index, gpus[i].drm_name);
+        
         amds_poll_metrics(&gpus[i]);
         amds_poll_ras(&gpus[i]);
 
+        if (!cfg->quiet) printf("  [1/5] Pattern fill/verify...\n");
         log_stage(lg, &gpus[i], "VRAM_PATTERN_BEGIN", "");
         amds_vram_test_pattern(&gpus[i], &ctx, lg);
 
+        if (!cfg->quiet) printf("  [2/5] Walking 1s...\n");
         log_stage(lg, &gpus[i], "VRAM_WALKING_BEGIN", "");
         amds_vram_test_walking(&gpus[i], &ctx, lg);
 
+        if (!cfg->quiet) printf("  [3/5] Moving inversions...\n");
         log_stage(lg, &gpus[i], "VRAM_MOVING_INV_BEGIN", "");
         amds_vram_test_moving_inversions(&gpus[i], &ctx, lg);
 
+        if (!cfg->quiet) printf("  [4/5] Random noise...\n");
         log_stage(lg, &gpus[i], "VRAM_RANDOM_NOISE_BEGIN", "");
         amds_vram_test_random_noise(&gpus[i], &ctx, lg);
 
+        if (!cfg->quiet) printf("  [5/5] PRNG test...\n");
         log_stage(lg, &gpus[i], "VRAM_PRNG_BEGIN", "");
         amds_vram_test_prng(&gpus[i], &ctx, lg);
+
+        if (!cfg->quiet) printf("[CLI] GPU%d VRAM tests completed.\n", gpus[i].index);
     }
 
     amds_ocl_close(&ctx);
+    if (!cfg->quiet) printf("[CLI] VRAM diagnostics finished.\n");
     return 0;
 }
 
 static int run_core_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_count, amds_logger_t *lg) {
-    (void)cfg;
+    if (!cfg->quiet) printf("[CLI] Starting GPU core stress tests...\n");
 
     amds_ocl_ctx_t ctx;
     if (amds_ocl_init(&ctx) < 0) {
@@ -119,29 +134,35 @@ static int run_core_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_cou
     amds_kmsg_monitor_start(lg);
 
     for (int i = 0; i < gpu_count; i++) {
+        if (!cfg->quiet) printf("[CLI] Stressing GPU%d (%s)...\n", gpus[i].index, gpus[i].drm_name);
         amds_poll_metrics(&gpus[i]);
         amds_poll_ras(&gpus[i]);
 
+        if (!cfg->quiet) printf("  [1/2] FP32 stress kernel...\n");
         amds_core_stress_fp32(&gpus[i], &ctx, lg);
 
         if (ctx.has_fp64) {
+            if (!cfg->quiet) printf("  [2/2] FP64 stress kernel (after 20s cooling)...\n");
             log_stage(lg, &gpus[i], "COOLING_PAUSE", "20s");
             if (g_amds_logger) amds_log_printf(g_amds_logger, "[CLI] Cooling down for 20s before FP64...");
             sleep(20);
 
             amds_core_stress_fp64(&gpus[i], &ctx, lg);
         } else {
+            if (!cfg->quiet) printf("  [2/2] FP64 stress kernel: SKIPPED (not supported)\n");
             log_stage(lg, &gpus[i], "CORE_FP64_SKIP", "cl_khr_fp64 unavailable");
         }
+        if (!cfg->quiet) printf("[CLI] GPU%d core stress completed.\n", gpus[i].index);
     }
 
     amds_kmsg_monitor_stop();
     amds_ocl_close(&ctx);
+    if (!cfg->quiet) printf("[CLI] Core stress tests finished.\n");
     return 0;
 }
 
 static int run_full_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_count, amds_logger_t *lg) {
-    (void)cfg;
+    if (!cfg->quiet) printf("[CLI] Starting FULL diagnostic suite (5 passes)...\n");
 
     amds_ocl_ctx_t ctx;
     if (amds_ocl_init(&ctx) < 0) {
@@ -152,9 +173,11 @@ static int run_full_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_cou
     amds_kmsg_monitor_start(lg);
 
     for (int pass = 1; pass <= 5; pass++) {
+        if (!cfg->quiet) printf("[CLI] --- PASS %d/5 ---\n", pass);
         if (g_amds_logger) amds_log_printf(g_amds_logger, "[CLI] --- PASS %d/5 ---", pass);
 
         for (int i = 0; i < gpu_count; i++) {
+            if (!cfg->quiet) printf("[CLI] GPU%d: Running VRAM tests...\n", gpus[i].index);
             amds_poll_metrics(&gpus[i]);
             amds_poll_ras(&gpus[i]);
 
@@ -173,6 +196,7 @@ static int run_full_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_cou
             log_stage(lg, &gpus[i], "VRAM_PRNG_BEGIN", "");
             amds_vram_test_prng(&gpus[i], &ctx, lg);
 
+            if (!cfg->quiet) printf("[CLI] GPU%d: Running CORE tests...\n", gpus[i].index);
             amds_core_stress_fp32(&gpus[i], &ctx, lg);
 
             if (ctx.has_fp64) {
@@ -181,8 +205,6 @@ static int run_full_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_cou
                 sleep(20);
 
                 amds_core_stress_fp64(&gpus[i], &ctx, lg);
-            } else {
-                log_stage(lg, &gpus[i], "CORE_FP64_SKIP", "cl_khr_fp64 unavailable");
             }
 
             amds_poll_metrics(&gpus[i]);
@@ -193,6 +215,7 @@ static int run_full_mode(const amds_config_t *cfg, amds_gpu_t *gpus, int gpu_cou
 
     amds_kmsg_monitor_stop();
     amds_ocl_close(&ctx);
+    if (!cfg->quiet) printf("[CLI] Full diagnostic suite finished.\n");
     return 0;
 }
 
